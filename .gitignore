@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+# Note: ecommerce.db should be committed for Streamlit Cloud deployment
+# Uncomment below if you don't want to commit database files
+# *.db
+# *.sqlite
+# *.sqlite3
+session_history.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Graph RAG data
+graph_rag_data.json
+
+# Visitor tracking
+visitor_log.json
+
+# Backups
+backups/
+*.bak
+
+# Deployment
+deploy.log
+

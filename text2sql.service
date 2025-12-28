@@ -1,0 +1,30 @@
+# Systemd service file for Text2SQL application
+# Place this file at: /etc/systemd/system/text2sql.service
+
+[Unit]
+Description=Text2SQL Streamlit Application
+After=network.target
+
+[Service]
+Type=simple
+User=text2sql
+Group=text2sql
+WorkingDirectory=/home/text2sql/apps/text2sql
+Environment="PATH=/home/text2sql/apps/text2sql/venv/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/text2sql/apps/text2sql/venv/bin/streamlit run src/app.py --server.port=8501 --server.address=127.0.0.1 --server.headless=true
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (adjust as needed)
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+
