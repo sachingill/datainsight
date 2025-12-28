@@ -22,6 +22,12 @@ ENV/
 # *.sqlite3
 session_history.db
 
+# Large data files - using Git LFS
+# Note: Files over 100MB cannot be pushed to GitHub
+# Very large CSV files should be excluded or compressed
+# data/events.csv  # 367MB - too large for GitHub
+# ecommerce  # 497MB - appears to be database file, exclude
+
 # IDE
 .vscode/
 .idea/
@@ -57,3 +63,5 @@ backups/
 # Deployment
 deploy.log
 
+ecommerce
+data/events.csv
