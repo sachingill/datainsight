@@ -23,8 +23,8 @@ st.set_page_config(page_title="Data Insights", page_icon="📊", layout="wide")
 
 # Track visitor
 if 'visitor_tracked' not in st.session_state:
-    # Get unique session ID
-    session_id = st.session_state.get('_session_id', id(st.session_state))
+    # Get unique session ID (convert to string)
+    session_id = st.session_state.get('_session_id', str(id(st.session_state)))
     visitor_stats = track_visitor(session_id)
     st.session_state.visitor_tracked = True
     st.session_state.visitor_count = visitor_stats["total_visitors"]

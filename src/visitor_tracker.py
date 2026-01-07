@@ -105,10 +105,12 @@ def track_visitor(session_id: str):
         save_visitor_data(data)
     
     # Check if this is a new session (excluding initial sessions)
-    is_new_visitor = session_id not in data["unique_sessions"] and not session_id.startswith("initial_session_")
+    # Convert session_id to string if it's not already
+    session_id_str = str(session_id)
+    is_new_visitor = session_id_str not in data["unique_sessions"] and not session_id_str.startswith("initial_session_")
     
     if is_new_visitor:
-        data["unique_sessions"].add(session_id)
+        data["unique_sessions"].add(session_id_str)
         data["total_visitors"] = len(data["unique_sessions"])
         data["last_updated"] = datetime.now().isoformat()
         save_visitor_data(data)
