@@ -2,6 +2,9 @@ import os
 import sys
 import warnings
 import time
+import signal
+from contextlib import contextmanager
+from typing import Optional
 import streamlit as st
 import unidecode
 from helper import display_code_plots, display_text_with_images
@@ -9,6 +12,8 @@ from llm_agent import initialize_python_agent, initialize_sql_agent
 from constants import OPENAI_API_KEY, LLM_MODEL_NAME, DATABASE
 from trace_handler import QueryTrace, extract_sql_from_text, parse_agent_output, display_trace
 from visitor_tracker import track_visitor, get_visitor_count
+from input_validation import validate_query_input, sanitize_input
+from rate_limiter import rate_limiter
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -100,6 +105,13 @@ with st.sidebar:
     
     st.divider()
     st.caption("💡 Tip: Your API key is required to use the AI features")
+    
+    # Rate limit status
+    st.divider()
+    remaining_requests = rate_limiter.get_remaining_requests(max_requests=20, time_window=60)
+    st.caption(f"📊 Rate Limit: {remaining_requests}/20 requests per minute remaining")
+    
+    st.divider()
     
     # Visitor count in sidebar
     visitor_count = st.session_state.get('visitor_count', 0)
@@ -234,6 +246,28 @@ if 'show_traces' not in st.session_state:
     st.session_state.show_traces = True
 
 
+@contextmanager
+def query_timeout(seconds: int = 30):
+    """
+    Context manager for query timeout.
+    
+    Args:
+        seconds: Timeout in seconds
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f"Query execution exceeded {seconds} second timeout")
+    
+    # Set the signal handler
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(seconds)
+    
+    try:
+        yield
+    finally:
+        # Restore old handler and cancel alarm
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
 
 def generate_response(code_type, input_text, trace=None):
     """
@@ -254,16 +288,41 @@ def generate_response(code_type, input_text, trace=None):
             trace.add_error("Agents not initialized")
         return "NO_RESPONSE"
     
-    local_prompt = unidecode.unidecode(input_text)
+    # Rate limiting check
+    is_allowed, rate_limit_error = rate_limiter.check_rate_limit(
+        max_requests=20,  # 20 requests per minute
+        time_window=60
+    )
+    if not is_allowed:
+        if trace:
+            trace.add_error(f"Rate limit: {rate_limit_error}")
+        return f"⚠️ {rate_limit_error}"
+    
+    # Input validation
+    is_valid, validation_error = validate_query_input(input_text)
+    if not is_valid:
+        if trace:
+            trace.add_error(f"Validation error: {validation_error}")
+        return f"❌ Input validation failed: {validation_error}"
+    
+    # Sanitize input
+    sanitized_input = sanitize_input(input_text)
+    local_prompt = unidecode.unidecode(sanitized_input)
     start_time = time.time()
     
     if code_type == "python":
         try:
-            # First get SQL data
+            # First get SQL data with timeout
             if trace:
                 trace.add_agent_step("thought", "Getting data from SQL agent for visualization")
             
-            local_response = st.session_state.sql_agent.invoke({"input": local_prompt})['output']
+            try:
+                with query_timeout(seconds=30):
+                    local_response = st.session_state.sql_agent.invoke({"input": local_prompt})['output']
+            except TimeoutError as e:
+                if trace:
+                    trace.add_error(f"Query timeout: {str(e)}")
+                return f"⏱️ Query execution timed out after 30 seconds. Please try a simpler query or break it into smaller parts."
             
             if trace:
                 # Extract SQL queries from response
@@ -285,9 +344,15 @@ def generate_response(code_type, input_text, trace=None):
         
         if trace:
             trace.add_agent_step("thought", "Generating Python/Plotly code for visualization")
-        
+
         local_prompt = {"input": "Write a code in python to plot the following data\n\n" + local_response}
-        result = st.session_state.python_agent.invoke(local_prompt)
+        try:
+            with query_timeout(seconds=30):
+                result = st.session_state.python_agent.invoke(local_prompt)
+        except TimeoutError as e:
+            if trace:
+                trace.add_error(f"Python code generation timeout: {str(e)}")
+            return f"⏱️ Code generation timed out after 30 seconds. Please try a simpler visualization request."
         
         if trace:
             if isinstance(result, dict) and 'output' in result:
@@ -305,7 +370,13 @@ def generate_response(code_type, input_text, trace=None):
                 trace.add_error("SQL agent not initialized")
             return "NO_RESPONSE"
         
-        result = st.session_state.sql_agent.run(local_prompt)
+        try:
+            with query_timeout(seconds=30):
+                result = st.session_state.sql_agent.run(local_prompt)
+        except TimeoutError as e:
+            if trace:
+                trace.add_error(f"SQL query timeout: {str(e)}")
+            return f"⏱️ Query execution timed out after 30 seconds. Please try a simpler query or add more specific filters."
         
         if trace:
             # Extract SQL queries and agent steps from result
