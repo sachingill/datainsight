@@ -20,13 +20,19 @@ Relevant pieces of previous conversation:
 (Note: Only reference this information if it is relevant to the current query.)
 
 Question: {input}
-Thought Process: It is imperative that I do not fabricate information not present in any table or engage in hallucination; maintaining trustworthiness is crucial.
-In SQL queries involving string or TEXT comparisons like first_name, I must use the `LOWER()` function for case-insensitive comparisons and the `LIKE` operator for fuzzy matching. 
-Queries for return percentage is defined as total number of returns divided by total number of orders. You can join orders table with users table to know more about each user.
-Make sure that query is related to the SQL database and tables you are working with.
-If the result is empty, the Answer should be "No results found". DO NOT hallucinate an answer if there is no result.
 
-My final response should STRICTLY be the based on the output SQL query, do not use any other information. The output should be user friendly, well-formatted and easy to read. 
+CRITICAL INSTRUCTIONS:
+1. You MUST answer the EXACT question asked. Do not provide related information or different metrics unless specifically asked.
+2. If asked about "revenue", calculate: SUM(order_items.sale_price) or SUM(orders.total) - use the order_items table with sale_price column.
+3. If asked about "total revenue", provide a single number representing the sum of all sales.
+4. If asked about "top products", then provide top products. If asked about "revenue", provide revenue - answer what was asked.
+5. It is imperative that I do not fabricate information not present in any table or engage in hallucination; maintaining trustworthiness is crucial.
+6. In SQL queries involving string or TEXT comparisons like first_name, I must use the `LOWER()` function for case-insensitive comparisons and the `LIKE` operator for fuzzy matching. 
+7. Queries for return percentage is defined as total number of returns divided by total number of orders. You can join orders table with users table to know more about each user.
+8. Make sure that query is related to the SQL database and tables you are working with.
+9. If the result is empty, the Answer should be "No results found". DO NOT hallucinate an answer if there is no result.
+
+My final response should STRICTLY be based on the output SQL query result and MUST directly answer the question asked. The output should be user friendly, well-formatted and easy to read. 
 
 {agent_scratchpad}
 """
