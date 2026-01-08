@@ -2,9 +2,9 @@ import os
 import sys
 import warnings
 import time
-import signal
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, Callable, Any
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import streamlit as st
 import unidecode
 from helper import display_code_plots, display_text_with_images
@@ -246,27 +246,28 @@ if 'show_traces' not in st.session_state:
     st.session_state.show_traces = True
 
 
-@contextmanager
-def query_timeout(seconds: int = 30):
+def run_with_timeout(func: Callable, timeout: int = 30, *args, **kwargs) -> Any:
     """
-    Context manager for query timeout.
+    Execute a function with a timeout using ThreadPoolExecutor.
+    This is thread-safe and works in Streamlit's execution context.
     
     Args:
-        seconds: Timeout in seconds
+        func: Function to execute
+        timeout: Timeout in seconds
+        *args, **kwargs: Arguments to pass to the function
+        
+    Returns:
+        Result of the function call
+        
+    Raises:
+        TimeoutError: If the function execution exceeds the timeout
     """
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"Query execution exceeded {seconds} second timeout")
-    
-    # Set the signal handler
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(seconds)
-    
-    try:
-        yield
-    finally:
-        # Restore old handler and cancel alarm
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            raise TimeoutError(f"Operation exceeded {timeout} second timeout")
 
 
 def generate_response(code_type, input_text, trace=None):
@@ -317,8 +318,10 @@ def generate_response(code_type, input_text, trace=None):
                 trace.add_agent_step("thought", "Getting data from SQL agent for visualization")
             
             try:
-                with query_timeout(seconds=30):
-                    local_response = st.session_state.sql_agent.invoke({"input": local_prompt})['output']
+                local_response = run_with_timeout(
+                    lambda: st.session_state.sql_agent.invoke({"input": local_prompt})['output'],
+                    timeout=30
+                )
             except TimeoutError as e:
                 if trace:
                     trace.add_error(f"Query timeout: {str(e)}")
@@ -347,8 +350,10 @@ def generate_response(code_type, input_text, trace=None):
 
         local_prompt = {"input": "Write a code in python to plot the following data\n\n" + local_response}
         try:
-            with query_timeout(seconds=30):
-                result = st.session_state.python_agent.invoke(local_prompt)
+            result = run_with_timeout(
+                lambda: st.session_state.python_agent.invoke(local_prompt),
+                timeout=30
+            )
         except TimeoutError as e:
             if trace:
                 trace.add_error(f"Python code generation timeout: {str(e)}")
@@ -371,8 +376,10 @@ def generate_response(code_type, input_text, trace=None):
             return "NO_RESPONSE"
         
         try:
-            with query_timeout(seconds=30):
-                result = st.session_state.sql_agent.run(local_prompt)
+            result = run_with_timeout(
+                lambda: st.session_state.sql_agent.run(local_prompt),
+                timeout=30
+            )
         except TimeoutError as e:
             if trace:
                 trace.add_error(f"SQL query timeout: {str(e)}")
