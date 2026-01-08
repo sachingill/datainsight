@@ -317,9 +317,16 @@ def generate_response(code_type, input_text, trace=None):
             if trace:
                 trace.add_agent_step("thought", "Getting data from SQL agent for visualization")
             
+            # Get agent from session state before passing to thread
+            sql_agent = st.session_state.get('sql_agent')
+            if not sql_agent:
+                if trace:
+                    trace.add_error("SQL agent not available")
+                return "NO_RESPONSE"
+            
             try:
                 local_response = run_with_timeout(
-                    lambda: st.session_state.sql_agent.invoke({"input": local_prompt})['output'],
+                    lambda: sql_agent.invoke({"input": local_prompt})['output'],
                     timeout=30
                 )
             except TimeoutError as e:
@@ -349,9 +356,17 @@ def generate_response(code_type, input_text, trace=None):
             trace.add_agent_step("thought", "Generating Python/Plotly code for visualization")
 
         local_prompt = {"input": "Write a code in python to plot the following data\n\n" + local_response}
+        
+        # Get agent from session state before passing to thread
+        python_agent = st.session_state.get('python_agent')
+        if not python_agent:
+            if trace:
+                trace.add_error("Python agent not available")
+            return "NO_RESPONSE"
+        
         try:
             result = run_with_timeout(
-                lambda: st.session_state.python_agent.invoke(local_prompt),
+                lambda: python_agent.invoke(local_prompt),
                 timeout=30
             )
         except TimeoutError as e:
@@ -370,14 +385,16 @@ def generate_response(code_type, input_text, trace=None):
         if trace:
             trace.add_agent_step("thought", "Processing SQL query request")
         
-        if not st.session_state.get('sql_agent'):
+        # Get agent from session state before passing to thread
+        sql_agent = st.session_state.get('sql_agent')
+        if not sql_agent:
             if trace:
                 trace.add_error("SQL agent not initialized")
             return "NO_RESPONSE"
         
         try:
             result = run_with_timeout(
-                lambda: st.session_state.sql_agent.run(local_prompt),
+                lambda: sql_agent.run(local_prompt),
                 timeout=30
             )
         except TimeoutError as e:
